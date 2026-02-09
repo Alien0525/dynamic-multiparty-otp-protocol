@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3-Party Protocol Visualizer</title>
+    <style>
+        :root {
+            --c-A: #3b82f6; --c-B: #ef4444; --c-C: #10b981;
+            --c-empty: #f3f4f6; --c-border: #e5e7eb; --c-text: #374151;
+        }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; padding: 20px; background: #f9fafb; color: var(--c-text); }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--c-border); padding-bottom: 15px; margin-bottom: 20px; }
+        h1 { margin: 0; font-size: 24px; color: #111827; }
+        .legend { display: flex; gap: 15px; font-size: 14px; font-weight: 600; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        
+        .controls { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid var(--c-border); margin-bottom: 20px; }
+        .input-group { display: flex; flex-direction: column; gap: 5px; }
+        .input-group label { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
+        input[type="number"] { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; width: 60px; }
+        
+        .inp-A { border-left: 4px solid var(--c-A) !important; }
+        .inp-B { border-left: 4px solid var(--c-B) !important; }
+        .inp-C { border-left: 4px solid var(--c-C) !important; }
+
+        button { padding: 9px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; height: 38px; transition: all 0.2s; }
+        .btn-run { background: #1f2937; color: white; }
+        .btn-run:hover { background: #374151; }
+        .btn-run:disabled { background: #9ca3af; cursor: not-allowed; transform: none; }
+        .btn-reset { background: white; border: 1px solid #d1d5db; color: #374151; }
+        .btn-reset:hover { background: #f3f4f6; }
+        
+        .divider { width: 1px; height: 40px; background: #e5e7eb; }
+        .shuffle-box { display: flex; align-items: center; gap: 8px; background: white; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; height: 20px; }
+        
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: #eff6ff; padding: 15px; border-radius: 8px; border-left: 5px solid var(--c-A); }
+        .stat-card h3 { margin: 0 0 5px 0; font-size: 12px; color: #1e40af; text-transform: uppercase; }
+        .stat-card p { margin: 0; font-size: 18px; font-weight: 700; color: #1e3a8a; }
+
+        .grid-wrapper { background: #fff; border: 1px solid var(--c-border); border-radius: 8px; padding: 15px; margin-bottom: 20px; max-height: 500px; overflow-y: auto; }
+        .grid { display: flex; flex-wrap: wrap; gap: 4px; }
+        .pad { width: 30px; height: 30px; background: var(--c-empty); border-radius: 4px; font-size: 10px; display: flex; justify-content: center; align-items: center; color: #9ca3af; }
+        .pad.used-A { background: var(--c-A); color: white; }
+        .pad.used-B { background: var(--c-B); color: white; }
+        .pad.used-C { background: var(--c-C); color: white; }
+        
+        .log-container { background: #111827; color: #10b981; padding: 15px; height: 200px; overflow-y: auto; font-family: monospace; border-radius: 8px; font-size: 13px; }
+        .log-entry { border-bottom: 1px solid #1f2937; padding: 2px 0; }
+        .log-err { color: #f87171; font-weight: bold; }
+        
+        /* Modal Style */
+        .blocked-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none; justify-content: center; align-items: center;
+            z-index: 1000;
+        }
+        .modal {
+            background: white; padding: 30px; border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            text-align: center; max-width: 400px; width: 100%; border: 2px solid #ef4444;
+        }
+        .modal h1 { color: #ef4444; font-size: 32px; margin-bottom: 10px; }
+        .modal p { color: #4b5563; margin-bottom: 20px; font-size: 16px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: center; }
+        .btn-view { background: #4b5563; color: white; }
+        .btn-view:hover { background: #374151; }
+        .btn-restart { background: #ef4444; color: white; }
+        .btn-restart:hover { background: #dc2626; }
+
+    </style>
+</head>
+<body>
+
+<div id="blockedOverlay" class="blocked-overlay">
+    <div class="modal">
+        <h1>THE END</h1>
+        <p id="blockedMsg">Party X is unable to use anymore pads.</p>
+        <div class="modal-actions">
+            <button class="btn-view" onclick="closePopup()">Close & View Stats</button>
+            <button class="btn-restart" onclick="init()">↻ Restart Now</button>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="header">
+        <h1>3-Party Protocol Visualizer</h1>
+        <div class="legend">
+            <div class="legend-item"><div class="dot" style="background: var(--c-A);"></div> A</div>
+            <div class="legend-item"><div class="dot" style="background: var(--c-C);"></div> C</div>
+            <div class="legend-item"><div class="dot" style="background: var(--c-B);"></div> B</div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <div class="input-group">
+            <label>N (Pads)</label>
+            <input type="number" id="inpN" value="100">
+        </div>
+        <div class="input-group">
+            <label>d (Delay)</label>
+            <input type="number" id="inpD" value="5">
+        </div>
+        <button class="btn-reset" onclick="init()">↻ Reset</button>
+        
+        <div class="divider"></div>
+        
+        <div class="input-group">
+            <label>Speed</label>
+            <input type="range" id="inpSpeedRange" min="0" max="200" value="150" oninput="updateSpeedLabel(this.value)" style="width: 80px; height: 36px;">
+            <input type="hidden" id="inpSpeed" value="50">
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="input-group">
+            <label style="color:var(--c-A)">Party A</label>
+            <input type="number" id="countA" value="0" min="0" class="inp-A">
+        </div>
+        <div class="input-group">
+            <label style="color:var(--c-C)">Party C</label>
+            <input type="number" id="countC" value="0" min="0" class="inp-C">
+        </div>
+        <div class="input-group">
+            <label style="color:var(--c-B)">Party B</label>
+            <input type="number" id="countB" value="0" min="0" class="inp-B">
+        </div>
+
+        <div class="input-group">
+            <label>&nbsp;</label>
+            <div class="shuffle-box" title="Randomize Execution Order">
+                <input type="checkbox" id="chkShuffle">
+                <label for="chkShuffle">Randomize</label>
+            </div>
+        </div>
+
+        <button class="btn-run" id="btnRun" onclick="run()">▶ Run Batch (Time +1)</button>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card">
+            <h3>Time (t)</h3>
+            <p id="s_step">t = 0</p>
+        </div>
+        <div class="stat-card">
+            <h3>Configuration</h3>
+            <p id="s_conf">A - C - B</p>
+        </div>
+        <div class="stat-card">
+            <h3>Pad Usage</h3>
+            <p id="s_used">0 / 100</p>
+        </div>
+        <div class="stat-card">
+            <h3>Efficiency</h3>
+            <p id="s_waste">0 Wasted</p>
+        </div>
+    </div>
+
+    <div class="grid-wrapper">
+        <div class="grid" id="grid"></div>
+    </div>
+
+    <div class="log-container" id="log">
+        <div class="log-info">System Ready.</div>
+    </div>
+</div>
+
+<script>
+    let globalTime = 0;
+    let sequenceCounter = 0; // Tracks total pads used
+    let isProtocolBlocked = false;
+
+    function updateSpeedLabel(val) {
+        let delay = 200 - val;
+        document.getElementById('inpSpeed').value = delay;
+    }
+
+    async function init() {
+        let nInput = document.getElementById('inpN');
+        let dInput = document.getElementById('inpD');
+        
+        let n = parseInt(nInput.value);
+        let d = parseInt(dInput.value);
+        
+        // Reset State
+        globalTime = 0;
+        sequenceCounter = 0;
+        isProtocolBlocked = false;
+        
+        document.getElementById('blockedOverlay').style.display = 'none';
+        document.getElementById('btnRun').disabled = false;
+        document.getElementById('s_step').innerText = "t = 0";
+        document.getElementById('countA').value = 0;
+        document.getElementById('countB').value = 0;
+        document.getElementById('countC').value = 0;
+        
+        let grid = document.getElementById('grid');
+        grid.innerHTML = '';
+        for(let i=1; i<=n; i++) {
+            let div = document.createElement('div');
+            div.className = 'pad'; div.id = 'p-'+i; div.innerText = i;
+            grid.appendChild(div);
+        }
+        
+        document.getElementById('log').innerHTML = '';
+        log("Initializing Protocol...", "info");
+
+        try {
+            await fetch('/init', { method: 'POST', body: JSON.stringify({n:n, d:d}) });
+            log(`Initialized: N=${n}, d=${d}`);
+            updateStatsUI({used: 0, total: n, wasted: 0, efficiency: 0}, "A-C-B");
+        } catch(e) {
+            log("Error: Start server.py!", "err");
+        }
+    }
+
+    function closePopup() {
+        document.getElementById('blockedOverlay').style.display = 'none';
+        // Run button stays disabled until Reset
+        document.getElementById('btnRun').disabled = true; 
+    }
+
+    async function run() {
+        if (isProtocolBlocked) return;
+
+        let a = document.getElementById('countA').value || 0;
+        let b = document.getElementById('countB').value || 0;
+        let c = document.getElementById('countC').value || 0;
+        let shuffle = document.getElementById('chkShuffle').checked;
+
+        if(a == 0 && b == 0 && c == 0) { log("Enter at least one message count.", "err"); return; }
+
+        let btn = document.getElementById('btnRun');
+        btn.disabled = true;
+
+        globalTime++;
+        document.getElementById('s_step').innerText = `t = ${globalTime}`;
+        log(`--- Start Time t=${globalTime} ---`, "info");
+
+        let res = await fetch('/run', { 
+            method: 'POST', 
+            body: JSON.stringify({a: a, b: b, c: c, shuffle: shuffle}) 
+        });
+        let data = await res.json();
+        
+        for(let step of data.trace) {
+            let speed = parseInt(document.getElementById('inpSpeed').value);
+            if(speed < 0) speed = 0;
+
+            if(step.success) {
+                sequenceCounter++; 
+                
+                let p = document.getElementById('p-'+step.pad);
+                if(p) {
+                    p.className = 'pad used-' + step.party;
+                    p.style.transform = 'scale(1.2)';
+                    setTimeout(() => p.style.transform = 'scale(1)', 200);
+                }
+                
+                let stateStr = Array.isArray(step.state) ? `[${step.state[0]}, ${step.state[1]}]` : step.state;
+                // Log shows global sequence number too
+                log(`t=${globalTime} (#${sequenceCounter}): Party ${step.party} used Pad ${step.pad}`);
+                document.getElementById('s_conf').innerText = `${step.left_p} - ${step.mid_p} - ${step.right_p}`;
+            } else {
+                log(`t=${globalTime}: ⚠ Party ${step.party} BLOCKED!`, "err");
+            }
+            
+            if(speed > 0) await new Promise(r => setTimeout(r, speed));
+        }
+
+        updateStatsUI(data.stats);
+
+        if (data.blocked) {
+            isProtocolBlocked = true;
+            btn.disabled = true; // Permanently disable run
+            
+            let blockedParty = data.blocked_party || "Unknown";
+            log(`*** PROTOCOL HALTED: Party ${blockedParty} blocked ***`, "err");
+            
+            document.getElementById('blockedMsg').innerText = `Party ${blockedParty} is unable to use anymore pads.`;
+            document.getElementById('blockedOverlay').style.display = 'flex';
+        } else {
+            // Re-enable run only if NOT blocked
+            btn.disabled = false;
+        }
+    }
+
+    function updateStatsUI(s, config=null) {
+        document.getElementById('s_used').innerText = `${s.used} / ${s.total}`;
+        document.getElementById('s_waste').innerText = `${s.wasted} Wasted (${s.efficiency.toFixed(1)}%)`;
+        if(config) document.getElementById('s_conf').innerText = config;
+    }
+
+    function log(msg, type="") {
+        let d = document.createElement('div');
+        d.innerText = msg; d.className = 'log-entry';
+        if(type === 'err') d.classList.add('log-err');
+        if(type === 'info') d.classList.add('log-info');
+        let l = document.getElementById('log');
+        l.appendChild(d); l.scrollTop = l.scrollHeight;
+    }
+    
+    window.onload = function() {
+        updateSpeedLabel(document.getElementById('inpSpeedRange').value);
+        init();
+    };
+</script>
+
+</body>
+</html>
