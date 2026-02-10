@@ -3,6 +3,7 @@ Enhanced Testing Program (Terminal)
 Uses the Single Source of Truth protocol.py
 """
 import random
+import sys
 from protocol import ThreePartyProtocol
 
 def get_party_state_str(protocol, party):
@@ -31,49 +32,63 @@ def print_final_statistics(protocol, attempts, blocked):
         rate = (sent / total * 100) if total > 0 else 0.0
         print(f"{p:<10} {sent:<10} {blk:<10} {total:<15} {rate:.1f}%")
     print("-" * 60)
-    print(f"Total: {n} | Used: {stats['used']} | Wasted: {stats['wasted']} ({stats['efficiency']:.1f}%)")
-    print(f"Config: {protocol.left_party}-{protocol.middle_party}-{protocol.right_party}")
+    print(f"Total Pads Used: {stats['used']}/{n}")
+    print(f"Wastage: {stats['wasted']} pads")
     print(f"{'='*90}\n")
 
-def run_interactive_mode(n, d):
+def run_interactive_mode():
+    n = 100
+    d = 5
     protocol = ThreePartyProtocol(n, d)
-    step = 0
-    attempts_count = {'A': 0, 'B': 0, 'C': 0}
-    blocked_count = {'A': 0, 'B': 0, 'C': 0}
     
     print(f"\nINTERACTIVE TEST MODE: n={n}, d={d}")
     print(f"Initial: {protocol.left_party}(L) - {protocol.middle_party}(M) - {protocol.right_party}(R)")
     
+    step = 0
+    attempts_count = {'A': 0, 'B': 0, 'C': 0}
+    blocked_count = {'A': 0, 'B': 0, 'C': 0}
+    
     while True:
+        # Get current stats for the prompt
+        stats = protocol.get_stats()
+        remaining = stats['total'] - stats['used']
+        current_config = f"({protocol.left_party}-{protocol.middle_party}-{protocol.right_party})"
+        
+        # New Info Block
+        print(f"\nCurrent Config {current_config}")
+        print(f"Pads Remaining: {remaining}")
+
         try:
-            if len(protocol.used_pads) == n:
-                print("\n>>> All pads used.")
-                break
-            
-            user_input = input("\nEnter counts (e.g. 5, 10, 15): ").strip()
+            user_input = input(f"Enter counts (Left, Middle, Right) [e.g. 5,10,5] or 'q': ")
             if user_input.lower() == 'q': break
-            if not user_input: continue
             
             schedule = []
-            if ':' in user_input:
-                parts = user_input.split()
-                for p in parts:
-                    if ':' in p:
-                        party, count = p.split(':')
-                        schedule.extend([party.upper()] * int(count))
-            else:
-                parts = user_input.replace(',', ' ').split()
+            parts = user_input.replace(',', ' ').split()
+            
+            if len(parts) == 3:
                 try:
-                    if len(parts) == 3:
-                        l, m, r = map(int, parts)
-                        schedule.extend([protocol.left_party] * l)
-                        schedule.extend([protocol.middle_party] * m)
-                        schedule.extend([protocol.right_party] * r)
-                        print(f"Batch: L({protocol.left_party}):{l} M({protocol.middle_party}):{m} R({protocol.right_party}):{r}")
-                except ValueError: pass
+                    l, m, r = map(int, parts)
+                    # Add messages to schedule based on current roles
+                    schedule.extend([protocol.left_party] * l)
+                    schedule.extend([protocol.middle_party] * m)
+                    schedule.extend([protocol.right_party] * r)
+                    
+                    # Randomized by default
+                    random.shuffle(schedule)
+                    print(f"Batch: {len(schedule)} messages (Asynchronous/Randomized)")
+                    
+                except ValueError:
+                    print("Invalid input. Use integers.")
+                    continue
+            else:
+                print("Please enter exactly 3 numbers.")
+                continue
+
+            batch_blocked = False
 
             for party in schedule:
                 attempts_count[party] += 1
+                
                 if protocol.can_send(party):
                     pad = protocol.send_message(party)
                     if pad:
@@ -86,6 +101,11 @@ def run_interactive_mode(n, d):
                 else:
                     blocked_count[party] += 1
                     print(f"⚠ Party {party} BLOCKED")
+                    batch_blocked = True
+            
+            if batch_blocked:
+                print("\n*** DEADLOCK DETECTED - ENDING SIMULATION ***")
+                break
             
         except KeyboardInterrupt:
             break
@@ -93,4 +113,4 @@ def run_interactive_mode(n, d):
     print_final_statistics(protocol, attempts_count, blocked_count)
 
 if __name__ == "__main__":
-    run_interactive_mode(100, 5)
+    run_interactive_mode()

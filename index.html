@@ -69,11 +69,19 @@
         }
         .modal h1 { color: #ef4444; font-size: 32px; margin-bottom: 10px; }
         .modal p { color: #4b5563; margin-bottom: 20px; font-size: 16px; }
-        .modal-actions { display: flex; gap: 10px; justify-content: center; }
+        .modal-actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px;}
         .btn-view { background: #4b5563; color: white; }
         .btn-view:hover { background: #374151; }
         .btn-restart { background: #ef4444; color: white; }
         .btn-restart:hover { background: #dc2626; }
+
+        /* Blocked Stats Table */
+        .blocked-stats-table { width: 100%; margin: 15px 0; border-collapse: collapse; font-size: 14px; }
+        .blocked-stats-table th { text-align: left; border-bottom: 1px solid #e5e7eb; padding: 5px; color: #6b7280; font-size: 12px; text-transform: uppercase; }
+        .blocked-stats-table td { padding: 8px 5px; border-bottom: 1px solid #f3f4f6; font-weight: 600; }
+        .blocked-row-A { color: var(--c-A); }
+        .blocked-row-B { color: var(--c-B); }
+        .blocked-row-C { color: var(--c-C); }
 
     </style>
 </head>
@@ -82,9 +90,22 @@
 <div id="blockedOverlay" class="blocked-overlay">
     <div class="modal">
         <h1>THE END</h1>
-        <p id="blockedMsg">Party X is unable to use anymore pads.</p>
+        <p id="blockedMsg">Protocol Deadlock Detected.</p>
+        
+        <table class="blocked-stats-table">
+            <thead>
+                <tr>
+                    <th>Party</th>
+                    <th>Pads Used</th>
+                    <th>Blocked Attempts</th>
+                </tr>
+            </thead>
+            <tbody id="blockedTableBody">
+                </tbody>
+        </table>
+
         <div class="modal-actions">
-            <button class="btn-view" onclick="closePopup()">Close & View Stats</button>
+            <button class="btn-view" onclick="closePopup()">Close & View Trace</button>
             <button class="btn-restart" onclick="init()">↻ Restart Now</button>
         </div>
     </div>
@@ -146,8 +167,8 @@
         <div class="input-group">
             <label>&nbsp;</label>
             <div class="shuffle-box" title="Randomize Execution Order">
-                <input type="checkbox" id="chkShuffle">
-                <label for="chkShuffle">Randomize</label>
+                <input type="checkbox" id="chkShuffle" checked>
+                <label for="chkShuffle">Asynchronous</label>
             </div>
         </div>
 
@@ -184,7 +205,7 @@
 
 <script>
     let globalTime = 0;
-    let sequenceCounter = 0; // Tracks total pads used
+    let sequenceCounter = 0; 
     let isProtocolBlocked = false;
 
     function updateSpeedLabel(val) {
@@ -230,7 +251,6 @@
         try {
             await fetch('/init', { method: 'POST', body: JSON.stringify({n:n, d:d}) });
             log(`Initialized: N=${n}, d=${d}`);
-            // Pass false for isBlocked
             updateStatsUI({used: 0, total: n, wasted: 0, efficiency: 0, sent: {A:0, B:0, C:0}}, "A-C-B", false);
         } catch(e) {
             log("Error: Start server.py!", "err");
@@ -239,7 +259,6 @@
 
     function closePopup() {
         document.getElementById('blockedOverlay').style.display = 'none';
-        // Run button stays disabled until Reset
         document.getElementById('btnRun').disabled = true; 
     }
 
@@ -299,7 +318,6 @@
             if(speed > 0) await new Promise(r => setTimeout(r, speed));
         }
 
-        // Pass data.blocked to UI updater
         updateStatsUI(data.stats, null, data.blocked);
 
         if (data.blocked) {
@@ -309,22 +327,39 @@
             let blockedParty = data.blocked_party || "Unknown";
             log(`*** PROTOCOL HALTED: Party ${blockedParty} blocked ***`, "err");
             
-            document.getElementById('blockedMsg').innerText = `Party ${blockedParty} is unable to use anymore pads.`;
+            // Populate the new Blocked Stats Table
+            let tbody = document.getElementById('blockedTableBody');
+            tbody.innerHTML = '';
+            
+            // We use the cumulative counts from server if available, else 0
+            let counts = data.blocked_counts || {A:0, B:0, C:0};
+            
+            ['A', 'C', 'B'].forEach(p => {
+                let row = document.createElement('tr');
+                row.className = `blocked-row-${p}`;
+                // Get Sent count from stats, Blocked from data.blocked_counts
+                row.innerHTML = `
+                    <td>Party ${p}</td>
+                    <td>${data.stats.sent[p]}</td>
+                    <td>${counts[p]}</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('blockedMsg').innerText = `Simulation Halted. Deadlock triggered by Party ${blockedParty}.`;
             document.getElementById('blockedOverlay').style.display = 'flex';
         } else {
             btn.disabled = false;
         }
     }
 
-    // Updated Signature: accepts isBlocked boolean
     function updateStatsUI(s, config=null, isBlocked=false) {
-        document.getElementById('s_used').innerText = `${s.used} / ${s.total}`;
+        let remaining = s.total - s.used;
+        document.getElementById('s_used').innerText = `${s.used} / ${s.total} (${remaining} Left)`;
         
-        // LOGIC FIX: Wastage is 0 unless actually blocked
         if (!isBlocked) {
             document.getElementById('s_waste').innerText = `0 Wasted (0.0%)`;
         } else {
-            // Use the "wasted" (unused) count from server only if blocked
             document.getElementById('s_waste').innerText = `${s.wasted} Wasted (${s.efficiency.toFixed(1)}%)`;
         }
         
