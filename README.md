@@ -53,7 +53,7 @@ The simulation uses a Python backend for the algorithmic logic and a JavaScript 
 
 1.  **Start the API Server:**
     ```bash
-    python server.py
+    python3 server.py
     ```
 2.  **Access the Interface:**
     Open your web browser and navigate to:
