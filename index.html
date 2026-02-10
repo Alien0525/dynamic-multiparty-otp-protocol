@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>3-Party Protocol Visualizer</title>
+    <title>Dynamic 3-Party OTP Protocol</title>
     <style>
         :root {
             --c-A: #3b82f6; --c-B: #ef4444; --c-C: #10b981;
@@ -14,11 +14,10 @@
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--c-border); padding-bottom: 15px; margin-bottom: 20px; }
         h1 { margin: 0; font-size: 24px; color: #111827; }
         
-        /* UPDATED LEGEND STYLES */
+        /* LEGEND STYLES */
         .legend { display: flex; gap: 20px; font-size: 14px; font-weight: 600; align-items: center; }
         .legend-item { display: flex; align-items: center; }
         .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 6px;}
-        /* Counter Style: No brackets, larger font */
         .ctr { font-weight: 700; color: #111827; margin-left: 8px; font-size: 1.2em; min-width: 20px; }
 
         .controls { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid var(--c-border); margin-bottom: 20px; }
@@ -93,7 +92,7 @@
 
 <div class="container">
     <div class="header">
-        <h1>3-Party Protocol Visualizer</h1>
+        <h1>Dynamic 3-Party OTP Protocol</h1>
         <div class="legend">
             <div class="legend-item">
                 <div class="dot" style="background: var(--c-A);"></div> 
@@ -161,7 +160,7 @@
             <p id="s_step">t = 0</p>
         </div>
         <div class="stat-card">
-            <h3>Configuration</h3>
+            <h3>Current Configuration</h3>
             <p id="s_conf">A - C - B</p>
         </div>
         <div class="stat-card">
@@ -169,8 +168,8 @@
             <p id="s_used">0 / 100</p>
         </div>
         <div class="stat-card">
-            <h3>Efficiency</h3>
-            <p id="s_waste">0 Wasted</p>
+            <h3>Wastage</h3>
+            <p id="s_waste">0 Wasted (0.0%)</p>
         </div>
     </div>
 
@@ -231,7 +230,8 @@
         try {
             await fetch('/init', { method: 'POST', body: JSON.stringify({n:n, d:d}) });
             log(`Initialized: N=${n}, d=${d}`);
-            updateStatsUI({used: 0, total: n, wasted: 0, efficiency: 0, sent: {A:0, B:0, C:0}}, "A-C-B");
+            // Pass false for isBlocked
+            updateStatsUI({used: 0, total: n, wasted: 0, efficiency: 0, sent: {A:0, B:0, C:0}}, "A-C-B", false);
         } catch(e) {
             log("Error: Start server.py!", "err");
         }
@@ -260,7 +260,6 @@
         document.getElementById('s_step').innerText = `t = ${globalTime}`;
         log(`--- Start Time t=${globalTime} ---`, "info");
 
-        // Grab current counters for live update
         let currA = parseInt(document.getElementById('ctr_A').innerText);
         let currB = parseInt(document.getElementById('ctr_B').innerText);
         let currC = parseInt(document.getElementById('ctr_C').innerText);
@@ -291,7 +290,6 @@
                 }
                 
                 let stateStr = Array.isArray(step.state) ? `[${step.state[0]}, ${step.state[1]}]` : step.state;
-                // Log shows global sequence number too
                 log(`t=${globalTime} (#${sequenceCounter}): Party ${step.party} used Pad ${step.pad}`);
                 document.getElementById('s_conf').innerText = `${step.left_p} - ${step.mid_p} - ${step.right_p}`;
             } else {
@@ -301,12 +299,12 @@
             if(speed > 0) await new Promise(r => setTimeout(r, speed));
         }
 
-        // Final sync with server stats (just in case)
-        updateStatsUI(data.stats);
+        // Pass data.blocked to UI updater
+        updateStatsUI(data.stats, null, data.blocked);
 
         if (data.blocked) {
             isProtocolBlocked = true;
-            btn.disabled = true; // Permanently disable run
+            btn.disabled = true; 
             
             let blockedParty = data.blocked_party || "Unknown";
             log(`*** PROTOCOL HALTED: Party ${blockedParty} blocked ***`, "err");
@@ -314,17 +312,24 @@
             document.getElementById('blockedMsg').innerText = `Party ${blockedParty} is unable to use anymore pads.`;
             document.getElementById('blockedOverlay').style.display = 'flex';
         } else {
-            // Re-enable run only if NOT blocked
             btn.disabled = false;
         }
     }
 
-    function updateStatsUI(s, config=null) {
+    // Updated Signature: accepts isBlocked boolean
+    function updateStatsUI(s, config=null, isBlocked=false) {
         document.getElementById('s_used').innerText = `${s.used} / ${s.total}`;
-        document.getElementById('s_waste').innerText = `${s.wasted} Wasted (${s.efficiency.toFixed(1)}%)`;
+        
+        // LOGIC FIX: Wastage is 0 unless actually blocked
+        if (!isBlocked) {
+            document.getElementById('s_waste').innerText = `0 Wasted (0.0%)`;
+        } else {
+            // Use the "wasted" (unused) count from server only if blocked
+            document.getElementById('s_waste').innerText = `${s.wasted} Wasted (${s.efficiency.toFixed(1)}%)`;
+        }
+        
         if(config) document.getElementById('s_conf').innerText = config;
         
-        // Sync counters final state (no brackets)
         if (s.sent) {
             document.getElementById('ctr_A').innerText = s.sent.A;
             document.getElementById('ctr_B').innerText = s.sent.B;
