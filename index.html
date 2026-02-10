@@ -13,10 +13,14 @@
         
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--c-border); padding-bottom: 15px; margin-bottom: 20px; }
         h1 { margin: 0; font-size: 24px; color: #111827; }
-        .legend { display: flex; gap: 15px; font-size: 14px; font-weight: 600; }
-        .legend-item { display: flex; align-items: center; gap: 6px; }
-        .dot { width: 12px; height: 12px; border-radius: 50%; }
         
+        /* UPDATED LEGEND STYLES */
+        .legend { display: flex; gap: 20px; font-size: 14px; font-weight: 600; align-items: center; }
+        .legend-item { display: flex; align-items: center; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 6px;}
+        /* Counter Style: No brackets, larger font */
+        .ctr { font-weight: 700; color: #111827; margin-left: 8px; font-size: 1.2em; min-width: 20px; }
+
         .controls { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid var(--c-border); margin-bottom: 20px; }
         .input-group { display: flex; flex-direction: column; gap: 5px; }
         .input-group label { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
@@ -91,9 +95,18 @@
     <div class="header">
         <h1>3-Party Protocol Visualizer</h1>
         <div class="legend">
-            <div class="legend-item"><div class="dot" style="background: var(--c-A);"></div> A</div>
-            <div class="legend-item"><div class="dot" style="background: var(--c-C);"></div> C</div>
-            <div class="legend-item"><div class="dot" style="background: var(--c-B);"></div> B</div>
+            <div class="legend-item">
+                <div class="dot" style="background: var(--c-A);"></div> 
+                A <span id="ctr_A" class="ctr">0</span>
+            </div>
+            <div class="legend-item">
+                <div class="dot" style="background: var(--c-C);"></div> 
+                C <span id="ctr_C" class="ctr">0</span>
+            </div>
+            <div class="legend-item">
+                <div class="dot" style="background: var(--c-B);"></div> 
+                B <span id="ctr_B" class="ctr">0</span>
+            </div>
         </div>
     </div>
     
@@ -199,6 +212,11 @@
         document.getElementById('countB').value = 0;
         document.getElementById('countC').value = 0;
         
+        // Reset Counters
+        document.getElementById('ctr_A').innerText = "0";
+        document.getElementById('ctr_B').innerText = "0";
+        document.getElementById('ctr_C').innerText = "0";
+        
         let grid = document.getElementById('grid');
         grid.innerHTML = '';
         for(let i=1; i<=n; i++) {
@@ -213,7 +231,7 @@
         try {
             await fetch('/init', { method: 'POST', body: JSON.stringify({n:n, d:d}) });
             log(`Initialized: N=${n}, d=${d}`);
-            updateStatsUI({used: 0, total: n, wasted: 0, efficiency: 0}, "A-C-B");
+            updateStatsUI({used: 0, total: n, wasted: 0, efficiency: 0, sent: {A:0, B:0, C:0}}, "A-C-B");
         } catch(e) {
             log("Error: Start server.py!", "err");
         }
@@ -242,6 +260,11 @@
         document.getElementById('s_step').innerText = `t = ${globalTime}`;
         log(`--- Start Time t=${globalTime} ---`, "info");
 
+        // Grab current counters for live update
+        let currA = parseInt(document.getElementById('ctr_A').innerText);
+        let currB = parseInt(document.getElementById('ctr_B').innerText);
+        let currC = parseInt(document.getElementById('ctr_C').innerText);
+
         let res = await fetch('/run', { 
             method: 'POST', 
             body: JSON.stringify({a: a, b: b, c: c, shuffle: shuffle}) 
@@ -255,6 +278,11 @@
             if(step.success) {
                 sequenceCounter++; 
                 
+                // Live Counter Update
+                if(step.party === 'A') document.getElementById('ctr_A').innerText = ++currA;
+                if(step.party === 'B') document.getElementById('ctr_B').innerText = ++currB;
+                if(step.party === 'C') document.getElementById('ctr_C').innerText = ++currC;
+
                 let p = document.getElementById('p-'+step.pad);
                 if(p) {
                     p.className = 'pad used-' + step.party;
@@ -273,6 +301,7 @@
             if(speed > 0) await new Promise(r => setTimeout(r, speed));
         }
 
+        // Final sync with server stats (just in case)
         updateStatsUI(data.stats);
 
         if (data.blocked) {
@@ -294,6 +323,13 @@
         document.getElementById('s_used').innerText = `${s.used} / ${s.total}`;
         document.getElementById('s_waste').innerText = `${s.wasted} Wasted (${s.efficiency.toFixed(1)}%)`;
         if(config) document.getElementById('s_conf').innerText = config;
+        
+        // Sync counters final state (no brackets)
+        if (s.sent) {
+            document.getElementById('ctr_A').innerText = s.sent.A;
+            document.getElementById('ctr_B').innerText = s.sent.B;
+            document.getElementById('ctr_C').innerText = s.sent.C;
+        }
     }
 
     function log(msg, type="") {
