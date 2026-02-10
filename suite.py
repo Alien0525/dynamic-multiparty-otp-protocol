@@ -1,104 +1,172 @@
 """
-suite.py - Monte Carlo Stress Testing for Dynamic 3-Party OTP
+suite.py - Stratified Monte Carlo Simulation (Scenario Testing)
+Covers S.1, S.2, S.3 with specific sub-cases and global aggregation.
 """
 import random
-import time
 import statistics
 from protocol import ThreePartyProtocol
 
 # --- Configuration ---
-# Test different scales (N) and delay parameters (d)
+# Testing for d <= 10% of n
 TEST_CONFIGS = [
-    {'n': 50,   'd': 3},
-    {'n': 100,  'd': 5},
-    {'n': 200,  'd': 10},
-    {'n': 500,  'd': 20},
+    {'n': 10,  'd': 1},
+    {'n': 50,  'd': 3},
+    {'n': 50,  'd': 4},
+    {'n': 50,  'd': 5},
+    {'n': 100, 'd': 5}, 
+    {'n': 100, 'd': 7}, 
+    {'n': 100, 'd': 10},
+    {'n': 200, 'd': 10},
+    {'n': 200, 'd': 15},
+    {'n': 200, 'd': 20},
+    {'n': 500, 'd': 10},
+    {'n': 500, 'd': 25},
+    {'n': 500, 'd': 50},
+    {'n': 1000, 'd': 10},
     {'n': 1000, 'd': 50},
+    {'n': 1000, 'd': 100},
 ]
 
-# How many simulations to run per configuration
 ITERATIONS = 1000 
 
-def run_single_simulation(n, d):
+def run_simulation(n, d, active_subset):
     """
-    Runs a single session until deadlock or exhaustion.
-    Returns: Percentage of wastage (0.0 to 100.0)
+    Runs a simulation where ONLY 'active_subset' parties are allowed to talk.
+    Returns: % Wastage
     """
     protocol = ThreePartyProtocol(n, d)
     
-    # Randomize Traffic Weights for this specific run
-    # This simulates scenarios where one party is faster than others
-    weights = [random.random() for _ in range(3)]
+    # Randomize "Personality" (Weights) for the ACTIVE subset
+    weights = [random.random() for _ in active_subset]
     total_w = sum(weights)
-    norm_weights = [w/total_w for w in weights] # [Prob_A, Prob_B, Prob_C]
-    parties = ['A', 'B', 'C']
-
+    norm_weights = [w/total_w for w in weights]
+    
     while True:
-        # 1. Select a party based on random weights (Traffic Skew)
-        party = random.choices(parties, weights=norm_weights, k=1)[0]
+        # Pick one party from the ACTIVE list
+        party = random.choices(active_subset, weights=norm_weights, k=1)[0]
         
-        # 2. Check if this specific move is possible
+        # Try to send
         if protocol.can_send(party):
             protocol.send_message(party)
         else:
-            # 3. If the selected party is blocked, we try the others to see 
-            # if it's a true deadlock or just a party-specific block.
-            # (In a real async network, other parties might still move).
-            possible_moves = [p for p in parties if protocol.can_send(p)]
+            # If blocked, check if OTHER active parties can move
+            others = [p for p in active_subset if protocol.can_send(p)]
+            if not others:
+                break # Deadlock among active parties
             
-            if not possible_moves:
-                # TRUE DEADLOCK: No one can move.
-                break
-            else:
-                # If others can move, force one of them to proceed 
-                # to maximize pad usage (greedy approach).
-                alt_party = random.choice(possible_moves)
-                protocol.send_message(alt_party)
-                
-        # Check if pad is full (Optimization to stop early)
+            # Force move from another active party
+            alt = random.choice(others)
+            protocol.send_message(alt)
+            
         if len(protocol.used_pads) == n:
             break
 
     stats = protocol.get_stats()
     return (stats['wasted'] / n) * 100.0
 
-def print_header():
-    print(f"{'N':<8} {'d':<6} {'Sims':<8} | {'Avg Waste %':<15} {'Worst Waste %':<15} {'Best Waste %':<15}")
-    print("-" * 80)
-
 def main():
-    print(f"\nRunning Monte Carlo Stress Test (Iterations={ITERATIONS})...\n")
-    print_header()
-
+    print(f"\n3-PARTY PROTOCOL TESTING SUITE (N={len(TEST_CONFIGS)}, Iterations={ITERATIONS}/scenario)")
+    
+    # Define Header Columns
+    header_cols = (
+        f"{'N':<5} {'d':<4} | "
+        f"{'S.1 End':<9} {'S.1 Mid':<9} | "
+        f"{'S.2 Ends':<9} {'S.2 Mix':<9} | "
+        f"{'S.3 All':<9} | "
+        f"{'Best %':<7} {'Worst %':<7} {'Avg %':<7}"
+    )
+    
+    # Calculate ruler length based on header
+    ruler = "=" * len(header_cols)
+    
+    print(ruler)
+    print("DEFINITIONS:")
+    print("  * Initial End Parties  : A (Left), B (Right)")
+    print("  * Initial Middle Party : C (Center)")
+    print(ruler)
+    
+    # Print Table Header
+    print(header_cols)
+    print("-" * len(header_cols))
+    
     for config in TEST_CONFIGS:
         n = config['n']
         d = config['d']
         
-        results = []
+        # Storage for results
+        res_s1_end = []
+        res_s1_mid = []
+        res_s2_ends = []
+        res_s2_mix = []
+        res_s3 = []
         
-        start_time = time.time()
+        # Master list for global stats (combines all scenarios)
+        all_runs_for_config = []
         
         for _ in range(ITERATIONS):
-            wastage = run_single_simulation(n, d)
-            results.append(wastage)
+            # --- S.1 Scenarios ---
+            # Case A: End Party (A or B)
+            party_s1_end = random.choice([['A'], ['B']])
+            val = run_simulation(n, d, party_s1_end)
+            res_s1_end.append(val)
+            all_runs_for_config.append(val)
+            
+            # Case B: Middle Party (C)
+            val = run_simulation(n, d, ['C'])
+            res_s1_mid.append(val)
+            all_runs_for_config.append(val)
+            
+            # --- S.2 Scenarios ---
+            # Case A: Ends only (A and B)
+            val = run_simulation(n, d, ['A', 'B'])
+            res_s2_ends.append(val)
+            all_runs_for_config.append(val)
+            
+            # Case B: Mixed (Middle involved) -> (A,C) or (B,C)
+            party_s2_mix = random.choice([['A', 'C'], ['B', 'C']])
+            val = run_simulation(n, d, party_s2_mix)
+            res_s2_mix.append(val)
+            all_runs_for_config.append(val)
+            
+            # --- S.3 Scenario ---
+            val = run_simulation(n, d, ['A', 'B', 'C'])
+            res_s3.append(val)
+            all_runs_for_config.append(val)
+            
+        # Calculate Scenario Averages
+        avg_s1_end = statistics.mean(res_s1_end)
+        avg_s1_mid = statistics.mean(res_s1_mid)
+        avg_s2_ends = statistics.mean(res_s2_ends)
+        avg_s2_mix = statistics.mean(res_s2_mix)
+        avg_s3 = statistics.mean(res_s3)
         
-        elapsed = time.time() - start_time
-        
-        # Calculate Statistics
-        avg_waste = statistics.mean(results)
-        worst_waste = max(results) # Max wastage = Worst Case
-        best_waste = min(results)  # Min wastage = Best Case
+        # Calculate Global Extremes and Average across ALL collected runs
+        global_best = min(all_runs_for_config)
+        global_worst = max(all_runs_for_config)
+        global_avg = statistics.mean(all_runs_for_config)
         
         # Print Row
-        print(f"{n:<8} {d:<6} {ITERATIONS:<8} | {avg_waste:<15.2f} {worst_waste:<15.2f} {best_waste:<15.2f}")
+        print(
+            f"{n:<5} {d:<4} | "
+            f"{avg_s1_end:<9.2f} {avg_s1_mid:<9.2f} | "
+            f"{avg_s2_ends:<9.2f} {avg_s2_mix:<9.2f} | "
+            f"{avg_s3:<9.2f} | "
+            f"{global_best:<7.2f} {global_worst:<7.2f} {global_avg:<7.2f}"
+        )
 
-    print("-" * 80)
-    print("\nLegend:")
-    print("  N: Total Pad Size")
-    print("  d: Delay Parameter")
-    print("  Avg Waste %: The mean space lost due to fragmentation.")
-    print("  Worst Waste %: The highest fragmentation observed (early deadlock).")
-    print("  Best Waste %: 0.00 means the protocol successfully used every single pad.")
+    print("-" * len(header_cols))
+    print("Legend:")
+    print("  S.1 End  : Only A or Only B talks (C is static)")
+    print("  S.1 Mid  : Only C talks")
+    print("  S.2 Ends : A and B talk (C is static)")
+    print("  S.2 Mix  : One End (A/B) and Middle (C) talk")
+    print("  S.3 All  : All parties active")
+    print("-" * len(header_cols))
+    print("Global Stats:")
+    print("  * Best % : The lowest wastage % found in ANY simulated scenario for this {N,d}.")
+    print("  * Worst %: The highest wastage % found in ANY simulated scenario for this {N,d}.")
+    print("  * Avg %  : The mean wastage across ALL 5,000 simulations combined (S.1 + S.2 + S.3).")
+    print("  * Static Limit  : 66.7% (The wastage if we just split N into 3 fixed parts and only 1 talked)")
 
 if __name__ == "__main__":
     main()
