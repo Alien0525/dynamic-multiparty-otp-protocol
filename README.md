@@ -12,7 +12,7 @@ This implementation proves that perfect secrecy can be maintained through **adap
 
 1.  **Dynamic Boundaries:** Parties track "Virtual Boundaries" to detect potential collisions before they occur.
 2.  **State Reallocation:** If a party's required pad space is threatened by a neighbor, the algorithm shifts consumption ranges to available "whitespace" in the pad array.
-3.  **Asynchronous Resilience:** The protocol guarantees correctness regardless of the message delivery order (up to a delay parameter $d$).
+3.  **Asynchronous Resilience:** The protocol guarantees correctness regardless of the message delivery order.
 
 ### 1.1 Mechanics (3-Party Topology)
 
@@ -45,8 +45,8 @@ The simulation uses a Python backend for the algorithmic logic and a JavaScript 
 ### 2.2 Simulation Parameters
 
 * **$N$ (Pad Size):** The total amount of cryptographic material available.
-* **$d$ (Delay):** The delay parameter. This simulates the maximum number of undelivered messages in the network. The algorithm requires a buffer of size $d$ to guarantee secrecy.
-* **Randomization:** You can toggle "Randomize" to shuffle the execution order within a specific time batch, testing the algorithm's asynchronous resilience.
+* **$d$ (Undelivery Parameter):** A parameter representing the **maximum number of undelivered messages** the network might hold at any instant. The protocol does not create this delay; rather, it uses $d$ to **enforce a safety buffer**. By ensuring no two parties write within distance $d$ of each other, perfect secrecy is maintained even if the network delays up to $d$ messages.
+* **Asynchronous Execution:** The simulation treats message requests as asynchronous events. It automatically randomizes the processing order of queued messages to stress-test the protocol's resilience against race conditions and non-deterministic traffic.
 
 ---
 
@@ -67,6 +67,7 @@ The protocol was evaluated using **Stratified Monte Carlo** simulations (via `su
 ### 4.1 Summary of Results
 
 **Screenshot of Test Suite Output:**
+
 ![Performance Matrix Screenshot](results.png)
 
 **Representative Data (Avg Wastage %):**
