@@ -181,7 +181,7 @@
             <p id="s_step">t = 0</p>
         </div>
         <div class="stat-card">
-            <h3>Current Configuration</h3>
+            <h3>Configuration</h3>
             <p id="s_conf">A - C - B</p>
         </div>
         <div class="stat-card">
@@ -269,6 +269,7 @@
         let b = document.getElementById('countB').value || 0;
         let c = document.getElementById('countC').value || 0;
         let shuffle = document.getElementById('chkShuffle').checked;
+        let n = parseInt(document.getElementById('inpN').value);
 
         if(a == 0 && b == 0 && c == 0) { log("Enter at least one message count.", "err"); return; }
 
@@ -301,6 +302,10 @@
                 if(step.party === 'B') document.getElementById('ctr_B').innerText = ++currB;
                 if(step.party === 'C') document.getElementById('ctr_C').innerText = ++currC;
 
+                // Live Pad Usage Update (Fixed)
+                let remaining = n - sequenceCounter;
+                document.getElementById('s_used').innerText = `${sequenceCounter} / ${n} (${remaining} Left)`;
+
                 let p = document.getElementById('p-'+step.pad);
                 if(p) {
                     p.className = 'pad used-' + step.party;
@@ -331,13 +336,11 @@
             let tbody = document.getElementById('blockedTableBody');
             tbody.innerHTML = '';
             
-            // We use the cumulative counts from server if available, else 0
             let counts = data.blocked_counts || {A:0, B:0, C:0};
             
             ['A', 'C', 'B'].forEach(p => {
                 let row = document.createElement('tr');
                 row.className = `blocked-row-${p}`;
-                // Get Sent count from stats, Blocked from data.blocked_counts
                 row.innerHTML = `
                     <td>Party ${p}</td>
                     <td>${data.stats.sent[p]}</td>
