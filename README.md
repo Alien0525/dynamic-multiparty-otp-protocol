@@ -18,26 +18,9 @@ This implementation proves that perfect secrecy can be maintained through **adap
 
 The current version implements a **3-Party Linear Topology** (A - C - B) over a shared pad space of size $N$.
 
-* **Pad Space ($N$):** A finite sequence of random pads indexed $1 \dots N$.
-* **A (Left Node):** Consumes statically from the start ($1 \to N$).
-* **B (Right Node):** Consumes statically from the end ($N \to 1$).
-* **C (Middle Node):** Dynamically consumes from the center ($N/2$), expanding outwards.
-
-### 1.2 Dynamic Reallocation Logic
-
-The algorithm employs a **Passive Safety Boundary** strategy. 
-
-* **Virtual Boundaries:** The protocol maintains `left_boundary` and `right_boundary` indices for the Middle Party (C).
-* **Collision Detection:** As A and B consume inwards, the algorithm calculates the "gap" remaining between the static parties and the dynamic middle party.
-* **The Shift:** If A's consumption approaches C's left boundary (within a threshold defined by delay $d$), C's state is effectively "frozen" on that side and reallocated to the largest available gap in the array. This allows C to "jump" over utilized sections or retreat into free space, ensuring $A \cap C = \emptyset$ and $B \cap C = \emptyset$ at all times.
-
-### 1.3 Asynchrony & Constraints
-
-The system is modeled to withstand network non-determinism:
-
-* **Time ($t$):** Execution is divided into discrete time units (batches).
-* **Shuffle (Network Latency):** Within a single time unit $t$, the order of execution is randomized. The protocol does not know if A, B, or C will attempt to send a message next.
-* **Blocking Condition:** If a party requires a pad that has already been consumed, or if the Middle Party cannot find a contiguous free space $ > d$ to reallocate into, the protocol identifies a deadlock/exhaustion state and halts to preserve perfect secrecy.
+* **Pad Space ($N$):** A finite sequence of random pads.
+* **Static Ends (A & B):** Consume from the outer edges ($1 \to \dots$ and $N \to \dots$).
+* **Dynamic Middle (C):** Consumes from the center but **jumps** to the midpoint of the largest available gap when squeezed, balancing the free space dynamically.
 
 ---
 
@@ -73,3 +56,34 @@ The simulation uses a Python backend for the algorithmic logic and a JavaScript 
 * `server.py`: A lightweight HTTP API bridging the UI and the Python protocol logic.
 * `index.html`: The client-side visualizer.
 * `testing.py`: A headless CLI tool for running automated batches and stress tests.
+* `suite.py`: A stratified Monte Carlo simulation suite for generating statistical performance matrices.
+
+---
+
+## 4. Performance & Evaluation
+
+The protocol was evaluated using **Stratified Monte Carlo** simulations (via `suite.py`), running 1,000 iterations per configuration across varied traffic scenarios.
+
+### 4.1 Summary of Results
+
+**Screenshot of Test Suite Output:**
+![Performance Matrix Screenshot](results.png)
+
+**Representative Data (Avg Wastage %):**
+
+| N   | d  | S.1 End | S.1 Mid | S.2 Ends | S.2 Mix | S.3 All   | **Global Avg** | **Static Limit** |
+|:---:|:--:|:-------:|:-------:|:--------:|:-------:|:---------:|:--------------:|:----------------:|
+| 100 | 5  | 16.0%   | 10.0%   | 15.8%    | 12.7%   | **11.9%** | **13.5%**      | 66.7%            |
+| 200 | 20 | 30.5%   | 20.0%   | 28.5%    | 24.5%   | **22.2%** | **24.8%**      | 66.7%            |
+| 500 | 50 | 30.8%   | 20.0%   | 29.1%    | 24.8%   | **22.5%** | **25.1%**      | 66.7%            |
+
+### 4.2 Scenario Legend
+
+The wastage percentage is highly dependent on *who* is communicating. The protocol performs best when all parties are active (S.3), as the dynamic middle party (C) can actively balance the load.
+
+* **S.1 End:** Only **A** or **B** sends messages (Worst case: C acts as a static wall).
+* **S.1 Mid:** Only **C** sends messages (Best case: C expands evenly).
+* **S.2 Ends:** **A** and **B** send messages; C is silent.
+* **S.2 Mix:** One end party (A/B) and the middle party (C) send messages.
+* **S.3 All:** All three parties (**A, B, C**) send messages (Most realistic scenario).
+* **Static Limit:** The theoretical wastage (66.7%) of a naive protocol that splits $N$ into 3 fixed segments when only 1 party is active.
